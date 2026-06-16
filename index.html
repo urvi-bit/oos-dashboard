@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wild · Daily OOS Dashboard</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --txt:#e7eaf0; --muted:#9aa3b2; --accent:#6ee7b7; --accent2:#7dd3fc;
+    --danger:#f87171; --warn:#fbbf24; --ok:#34d399; --chip:#232834;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  header{padding:20px 28px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  h1{font-size:18px;margin:0;font-weight:650;letter-spacing:.2px}
+  h1 span{color:var(--muted);font-weight:400;font-size:13px;margin-left:8px}
+  .tabs{display:flex;gap:6px}
+  .tab{padding:9px 18px;border-radius:9px;background:var(--panel);border:1px solid var(--line);color:var(--muted);cursor:pointer;font-weight:600;font-size:13px}
+  .tab.active{background:var(--accent);color:#04231a;border-color:var(--accent)}
+  .wrap{padding:24px 28px;max-width:1280px;margin:0 auto}
+  .drop{border:1.5px dashed var(--line);border-radius:14px;padding:28px;text-align:center;background:var(--panel);margin-bottom:22px;transition:.15s}
+  .drop.hover{border-color:var(--accent);background:#15201b}
+  .drop input{display:none}
+  .drop label{color:var(--accent2);cursor:pointer;text-decoration:underline}
+  .filebadges{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:14px}
+  .fb{font-size:11px;padding:4px 10px;border-radius:20px;background:var(--chip);color:var(--muted);border:1px solid var(--line)}
+  .fb.ok{color:var(--ok);border-color:#1f4d3b}
+  .controls{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:9px 12px;font-size:13px;font-weight:600}
+  label.ctl{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:24px}
+  .kpi{background:linear-gradient(160deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+  .kpi .v{font-size:30px;font-weight:700;letter-spacing:-.5px}
+  .kpi .l{color:var(--muted);font-size:12px;margin-top:6px;text-transform:uppercase;letter-spacing:.5px}
+  .kpi.danger .v{color:var(--danger)} .kpi.warn .v{color:var(--warn)} .kpi.ok .v{color:var(--ok)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:22px}
+  .card .hd{display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid var(--line)}
+  .card .hd h2{font-size:14px;margin:0;font-weight:650}
+  .btn{background:var(--accent2);color:#062235;border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer}
+  .btn:hover{filter:brightness(1.08)}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:11px 18px;border-bottom:1px solid var(--line);font-size:13px}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;cursor:pointer;user-select:none}
+  th:hover{color:var(--txt)}
+  tbody tr:hover{background:var(--panel2)}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+  .pill.oos{background:#3a1414;color:var(--danger)} .pill.part{background:#3a2c10;color:var(--warn)} .pill.rel{background:#103024;color:var(--ok)}
+  .sku{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;color:var(--accent2)}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  .note{color:var(--muted);font-size:12px;margin:-8px 0 20px;line-height:1.5}
+  .topbar{height:4px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .hidden{display:none}
+  #saved-note{margin-top:12px;font-size:12px;color:var(--muted)}
+  #saved-note a{color:var(--accent2);cursor:pointer}
+  .toggle{display:flex;gap:6px}
+  .toggle button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:7px 12px;font-weight:700;font-size:12px;cursor:pointer}
+  .toggle button.on{background:var(--accent);color:#04231a;border-color:var(--accent)}
+  .chart{display:flex;align-items:flex-end;gap:6px;height:240px}
+  .col{flex:1;display:flex;flex-direction:column-reverse;position:relative;min-width:0}
+  .col .seg{width:100%}
+  .col .clbl{position:absolute;bottom:-20px;left:0;right:0;text-align:center;font-size:10px;color:var(--muted);white-space:nowrap}
+  .col .vlbl{text-align:center;font-size:10px;font-weight:700;color:var(--txt);line-height:1;margin-bottom:3px}
+  .chartwrap{padding:16px 18px 30px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;font-size:12px;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+  .whrow{display:flex;align-items:center;gap:10px;font-size:13px;margin-bottom:9px}
+  .whrow .nm{width:84px;color:var(--muted)}
+  .whrow .track{flex:1;background:var(--panel2);border-radius:4px;height:22px;display:flex;overflow:hidden}
+  .whrow .tot{width:54px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+  .topgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px;padding:16px 18px}
+  .topwh-h{font-size:13px;font-weight:700;margin-bottom:6px;display:flex;justify-content:space-between;align-items:baseline}
+  .topwh-h .c{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .topwh table{width:100%;border-collapse:collapse}
+  .topwh td{padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;vertical-align:top}
+  .topwh td.o{text-align:right;font-weight:700;white-space:nowrap;color:var(--accent2);font-variant-numeric:tabular-nums}
+  .topwh .nm{color:var(--muted);font-weight:400}
+</style>
+</head>
+<body>
+<div class="topbar"></div>
+<header>
+  <h1>Wild · Out-of-Stock Dashboard <span id="asof"></span></h1>
+  <div class="tabs">
+    <div class="tab active" data-page="sum">⓪ Summary</div>
+    <div class="tab" data-page="na">① Not-Assigned (Fulfil)</div>
+    <div class="tab" data-page="bo">② Backorders (3PL)</div>
+    <div class="tab" data-page="cov">③ Reserved coverage</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="drop" id="drop">
+    <div style="font-size:15px;font-weight:600;margin-bottom:6px">Drop today's exports here, or <label for="file">browse</label></div>
+    <div style="color:var(--muted);font-size:12px">NA orders view · Reserved inventory · BackOrders export (Airbox) · Backordered &amp; On-Hold (Stord) · Next (optional)</div>
+    <input type="file" id="file" multiple accept=".csv">
+    <div class="filebadges" id="badges"></div>
+    <div id="saved-note"></div>
+  </div>
+
+  <!-- PAGE 0: SUMMARY -->
+  <section id="page-sum">
+    <div class="kpis">
+      <div class="kpi danger"><div class="v" id="sum-total">–</div><div class="l">Total OOS orders</div></div>
+      <div class="kpi"><div class="v" id="sum-na">–</div><div class="l">Not assigned (Fulfil)</div></div>
+      <div class="kpi warn"><div class="v" id="sum-bo">–</div><div class="l">Backorders (3PL)</div></div>
+    </div>
+    <div class="card">
+      <div class="hd"><h2>OOS orders by warehouse</h2></div>
+      <div style="padding:16px 18px">
+        <div class="legend"><span><i style="background:#378ADD"></i>Not assigned</span><span><i style="background:#EF9F27"></i>Backorders</span></div>
+        <div id="sum-wh"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="hd"><h2>Top 5 OOS SKUs per warehouse</h2></div>
+      <div class="topgrid" id="sum-top"><div class="empty">Upload files to populate.</div></div>
+    </div>
+    <div class="card">
+      <div class="hd">
+        <h2>OOS orders by creation date — last 14 days</h2>
+        <div class="toggle" id="chart-toggle">
+          <button data-mode="source" class="on">By source</button>
+          <button data-mode="wh">By warehouse</button>
+        </div>
+      </div>
+      <div class="chartwrap">
+        <div class="legend" id="sum-legend"></div>
+        <div class="chart" id="sum-chart"><div class="empty">Upload files to populate.</div></div>
+      </div>
+    </div>
+    <div class="card" id="raw-card">
+      <div class="hd">
+        <h2>Export raw data</h2>
+        <div style="display:flex;gap:10px;align-items:center">
+          <div class="toggle" id="raw-toggle">
+            <button data-raw="na" class="on">Not assigned</button>
+            <button data-raw="bo">Backorders</button>
+          </div>
+          <button class="btn" id="raw-export">⤓ Export CSV</button>
+        </div>
+      </div>
+      <div style="padding:14px 18px;color:var(--muted);font-size:12px" id="raw-note">Upload files to export.</div>
+    </div>
+  </section>
+
+  <!-- PAGE 1: NA -->
+  <section id="page-na" class="hidden">
+    <div class="controls">
+      <label class="ctl">Warehouse</label>
+      <select id="na-wh"><option value="ALL">All warehouses</option></select>
+      <span class="note" style="margin:0">Reserved inventory netted per warehouse (Airbox 18 = Airbox UK · Airbox NL = Airbox EU) — SKUs fully covered by reserved at that site are excluded from OOS.</span>
+    </div>
+    <div class="kpis">
+      <div class="kpi danger"><div class="v" id="na-oos-skus">–</div><div class="l">OOS SKUs</div></div>
+      <div class="kpi warn"><div class="v" id="na-oos-orders">–</div><div class="l">Orders impacted (OOS)</div></div>
+      <div class="kpi"><div class="v" id="na-orders">–</div><div class="l">Total NA orders</div></div>
+      <div class="kpi"><div class="v" id="na-units">–</div><div class="l">OOS units short</div></div>
+      <div class="kpi ok"><div class="v" id="na-released">–</div><div class="l">SKUs released via reserved</div></div>
+    </div>
+    <div class="card">
+      <div class="hd"><h2>Top OOS SKUs — Not Assigned</h2><button class="btn" data-export="na">⤓ Export CSV</button></div>
+      <div id="na-table"><div class="empty">Upload the NA orders view + reserved inventory files to populate.</div></div>
+    </div>
+  </section>
+
+  <!-- PAGE 2: BO -->
+  <section id="page-bo" class="hidden">
+    <div class="controls">
+      <label class="ctl">Warehouse</label>
+      <select id="bo-wh"><option value="ALL">All warehouses</option></select>
+    </div>
+    <div class="kpis">
+      <div class="kpi danger"><div class="v" id="bo-oos-skus">–</div><div class="l">Backordered SKUs</div></div>
+      <div class="kpi warn"><div class="v" id="bo-orders">–</div><div class="l">Total backorders</div></div>
+      <div class="kpi"><div class="v" id="bo-units">–</div><div class="l">Units on backorder</div></div>
+    </div>
+    <div class="card">
+      <div class="hd"><h2>Top Backordered SKUs — by warehouse</h2><button class="btn" data-export="bo">⤓ Export CSV</button></div>
+      <div id="bo-table"><div class="empty">Upload the Airbox / Stord / Next backorder files to populate.</div></div>
+    </div>
+  </section>
+
+  <!-- PAGE 3: RESERVED COVERAGE -->
+  <section id="page-cov" class="hidden">
+    <div class="controls">
+      <label class="ctl">Warehouse</label>
+      <select id="cov-wh"><option value="ALL">All warehouses</option></select>
+      <span class="note" style="margin:0">Every not-assigned SKU vs reserved inventory at its own warehouse. Released = reserved fully covers demand (excluded from OOS). Reserved assumed available to release.</span>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="v" id="cov-demand">–</div><div class="l">NA units demanded</div></div>
+      <div class="kpi ok"><div class="v" id="cov-covered">–</div><div class="l">Units covered by reserved</div></div>
+      <div class="kpi danger"><div class="v" id="cov-short">–</div><div class="l">Units short (OOS)</div></div>
+      <div class="kpi"><div class="v" id="cov-pct">–</div><div class="l">Coverage</div></div>
+      <div class="kpi ok"><div class="v" id="cov-rel">–</div><div class="l">SKUs fully covered</div></div>
+      <div class="kpi danger"><div class="v" id="cov-oos">–</div><div class="l">SKUs OOS / partial</div></div>
+    </div>
+    <div class="card">
+      <div class="hd"><h2>Reserved coverage — every NA SKU per warehouse</h2><button class="btn" data-export="cov">⤓ Export CSV</button></div>
+      <div id="cov-table"><div class="empty">Upload the NA orders view + reserved inventory files to populate.</div></div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* ---------- CSV parser (handles quotes, commas, newlines) ---------- */
+function parseCSV(text){
+  text = text.replace(/^﻿/,'');
+  const rows=[]; let row=[],field='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){field+='"';i++;} else q=false; }
+      else field+=c;
+    }else{
+      if(c==='"') q=true;
+      else if(c===','){row.push(field);field='';}
+      else if(c==='\n'){row.push(field);rows.push(row);row=[];field='';}
+      else if(c==='\r'){}
+      else field+=c;
+    }
+  }
+  if(field.length||row.length){row.push(field);rows.push(row);}
+  return rows.filter(r=>r.length>1||(r.length===1&&r[0].trim()!==''));
+}
+const stripTags=s=>(s||'').replace(/<[^>]*>/g,'').trim();
+const num=s=>{const n=parseFloat(String(s).replace(/[^0-9.\-]/g,''));return isNaN(n)?0:n;};
+const normWH=w=>{
+  w=(w||'').toLowerCase();
+  if(w.includes('stord')) return 'Stord';
+  if(w.includes('next')) return 'Next';
+  if(w.includes('fba')){
+    if(w.includes('usa')||w.includes('us')) return 'FBA USA';
+    if(w.includes('uk')) return 'FBA UK';
+    if(w.includes('ge')) return 'FBA GE';
+    return 'FBA';
+  }
+  // UK Airbox = "Airbox 18" (Fulfil) = "Airbox UK" (Odoo/reserved)
+  if(w.includes('airbox 18')||w.includes('ukab')||w.includes('airbox uk')) return 'Airbox 18';
+  // EU Airbox = "Airbox NL" (Fulfil) = "Airbox (EU)" (Odoo/reserved)
+  if(w.includes('airbox nl')||w.includes('(eu)')||w.includes('airbox eu')||w.includes('airbox zero')) return 'Airbox NL';
+  return w?w.charAt(0).toUpperCase()+w.slice(1):'Unknown';
+};
+
+const MONTHS={Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
+const parseD=s=>{s=(s||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
+  let m=/^(\d{1,2})-([A-Za-z]{3})-(\d{4})/.exec(s); if(m)return m[3]+'-'+(MONTHS[m[2]]||'01')+'-'+m[1].padStart(2,'0');
+  m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s); if(m)return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  return '';};
+
+/* ---------- state ---------- */
+const DATA={na:null,reserved:null,airbox:null,stord:null,next:null};
+const RAW={}; const LS_KEY='oosDashboardData_v1';
+let naRows=[], boRows=[], summary={byWh:{},totals:{na:0,bo:0,total:0},days:[]};
+let sumMode='source', rawMode='na';
+const WH_COLORS={'Stord':'#378ADD','Airbox 18':'#EF9F27','Airbox NL':'#1D9E75','Next':'#D4537E','FBA USA':'#7F77DD','FBA UK':'#9aa3b2','FBA GE':'#D85A30'};
+// bundles explode into components on assignment — not real OOS
+const isBundle=(sku,name)=>/^WBU/i.test(sku||'')||/\bbundle\b/i.test(name||'');
+
+/* ---------- file ingestion w/ auto-detect ---------- */
+function detect(headerRow){
+  const h=headerRow.map(x=>x.toLowerCase().trim());
+  const has=k=>h.some(x=>x.includes(k));
+  if(has('ff_number')) return 'na';
+  if(has('to_location/rec_name')||has('product/rec_name')) return 'reserved';
+  if(has('onbackorder')) return 'airbox';
+  if(has('order line status')) return 'stord';
+  if(has('ord qty')) return 'next';
+  return null;
+}
+function ingest(name,text){
+  const rows=parseCSV(text); if(!rows.length) return null;
+  const type=detect(rows[0]); if(!type) return null;
+  DATA[type]={name,header:rows[0],rows:rows.slice(1)};
+  RAW[type]=text;
+  return type;
+}
+const LABEL={na:'NA orders',reserved:'Reserved inv',airbox:'Airbox BO',stord:'Stord BO',next:'Next BO'};
+function renderBadges(){
+  const b=document.getElementById('badges'); b.innerHTML='';
+  Object.keys(LABEL).forEach(k=>{
+    const d=document.createElement('div');
+    const on=!!DATA[k];
+    d.className='fb'+(on?' ok':'');
+    d.textContent=(on?'✓ ':'• ')+LABEL[k]+(on?' ('+DATA[k].rows.length+')':'');
+    b.appendChild(d);
+  });
+}
+
+/* ---------- compute Page 1: NA ---------- */
+function computeNA(){
+  if(!DATA.na){naRows=[];return;}
+  const H=DATA.na.header.map(x=>x.trim());
+  const ci=n=>H.indexOf(n);
+  const iSku=ci('Sku'), iName=ci('Sku_Name'), iQty=ci('Quantity'), iWh=ci('Warehouse'), iFf=ci('Ff_Number');
+  // reserved per warehouse + SKU (location-aware)
+  const reserved={};
+  if(DATA.reserved){
+    DATA.reserved.rows.forEach(r=>{
+      const m=/^\s*\[([^\]]+)\]/.exec(r[0]||'');
+      if(!m) return;
+      const sku=m[1].trim(); const bucket=normWH(r[1]); // from_location/rec_name
+      const key=bucket+'|'+sku;
+      reserved[key]=(reserved[key]||0)+num(r[3]);
+    });
+  }
+  // aggregate NA by warehouse + SKU
+  const agg={};
+  DATA.na.rows.forEach(r=>{
+    const sku=(r[iSku]||'').trim(); if(!sku) return;
+    if(isBundle(sku,r[iName])) return; // bundles are not real OOS
+    const wh=normWH(r[iWh]); const qty=num(r[iQty]); const ff=r[iFf];
+    const key=wh+'|'+sku;
+    if(!agg[key]) agg[key]={sku,name:(r[iName]||'').trim(),wh,qty:0,orders:new Set()};
+    agg[key].qty+=qty; agg[key].orders.add(ff);
+  });
+  naRows=Object.values(agg).map(a=>{
+    const res=reserved[a.wh+'|'+a.sku]||0;
+    const short=Math.max(0,a.qty-res);
+    const status= res>=a.qty ? 'Released' : (res>0 ? 'Partial' : 'OOS');
+    return {sku:a.sku,name:a.name,wh:a.wh,qty:a.qty,reserved:res,short,
+            orders:a.orders.size,orderSet:a.orders,status};
+  });
+}
+/* ---------- compute Page 2: Backorders ---------- */
+function computeBO(){
+  boRows=[];
+  const agg={};
+  const add=(sku,name,wh,qty,order,status)=>{
+    if(!sku) return;
+    const k=sku+'|'+wh;
+    if(!agg[k]) agg[k]={sku,name,wh,qty:0,orders:new Set(),status};
+    agg[k].qty+=qty; agg[k].orders.add(order);
+  };
+  if(DATA.airbox){
+    const H=DATA.airbox.header.map(x=>x.trim()); const ci=n=>H.indexOf(n);
+    const iOrd=ci('OrderNumber'),iWh=ci('PrimaryWarehouse'),iSku=ci('SKU'),iName=ci('Name'),iObo=ci('OnBackOrder');
+    const seen=new Set();
+    DATA.airbox.rows.forEach(r=>{
+      const obo=num(r[iObo]); if(obo<=0) return;
+      const sku=(r[iSku]||'').trim(), ord=r[iOrd], key=ord+'|'+sku;
+      if(seen.has(key)) return; seen.add(key);
+      add(sku,(r[iName]||'').trim(),normWH(r[iWh]),obo,ord,'Backordered');
+    });
+  }
+  if(DATA.stord){
+    const H=DATA.stord.header.map(x=>x.trim()); const ci=n=>H.indexOf(n);
+    const iSku=ci('SKU'),iName=ci('Item Name'),iStat=ci('Order Line Status'),iQty=ci('Quantity'),iOrd=ci('Order Number');
+    DATA.stord.rows.forEach(r=>{
+      if((r[iStat]||'').trim().toLowerCase()!=='backordered') return; // ignore on_hold etc.
+      const sku=stripTags(r[iSku]); const ord=stripTags(r[iOrd]);
+      add(sku,(r[iName]||'').trim(),'Stord',num(r[iQty]),ord,'Backordered');
+    });
+  }
+  if(DATA.next){
+    const H=DATA.next.header.map(x=>x.trim()); const ci=n=>H.findIndex(x=>x.toLowerCase()===n);
+    const iSku=ci('sku'),iName=ci('description'),iQty=ci('ord qty'),iOrd=ci('order id');
+    DATA.next.rows.forEach(r=>{
+      add((r[iSku]||'').trim(),(r[iName]||'').trim(),'Next',num(r[iQty]),r[iOrd],'Backordered');
+    });
+  }
+  boRows=Object.values(agg).map(a=>({sku:a.sku,name:a.name,wh:a.wh,qty:a.qty,orders:a.orders.size,status:a.status}));
+}
+
+/* ---------- compute Summary (NA OOS + Backorders, distinct orders) ---------- */
+function computeSummary(){
+  summary={byWh:{},totals:{na:0,bo:0,total:0},days:[],topByWh:{}};
+  const dayMap={}, whAgg={}, skuMap={};
+  const D=d=>dayMap[d]||(dayMap[d]={na:new Set(),bo:new Set(),whNA:{},whBO:{}});
+  const W=w=>whAgg[w]||(whAgg[w]={na:new Set(),bo:new Set()});
+  const SK=(wh,sku,name)=>{const k=wh+'|'+sku;if(!skuMap[k])skuMap[k]={wh,sku,name:name||'',na:new Set(),bo:new Set()};if(!skuMap[k].name&&name)skuMap[k].name=name;return skuMap[k];};
+  // NA — distinct orders that contain an OOS/Partial line (per warehouse)
+  if(DATA.na){
+    const H=DATA.na.header.map(x=>x.trim());const ci=n=>H.indexOf(n);
+    const iFf=ci('Ff_Number'),iWh=ci('Warehouse'),iSku=ci('Sku'),iName=ci('Sku_Name'),iDate=ci('Order_Created_Date');
+    const oosByWh={}; naRows.filter(r=>r.status!=='Released').forEach(r=>{(oosByWh[r.wh]=oosByWh[r.wh]||new Set()).add(r.sku);});
+    DATA.na.rows.forEach(r=>{
+      const wh=normWH(r[iWh]),sku=(r[iSku]||'').trim(),ff=r[iFf];
+      if(oosByWh[wh]&&oosByWh[wh].has(sku)){
+        const d=parseD(r[iDate]); W(wh).na.add(ff); SK(wh,sku,(r[iName]||'').trim()).na.add(ff);
+        const dm=D(d); dm.na.add(ff); (dm.whNA[wh]=dm.whNA[wh]||new Set()).add(ff);
+      }
+    });
+  }
+  const addBO=(wh,sku,name,ord,d)=>{W(wh).bo.add(ord);if(sku)SK(wh,sku,name).bo.add(ord);const dm=D(d);dm.bo.add(ord);(dm.whBO[wh]=dm.whBO[wh]||new Set()).add(ord);};
+  if(DATA.airbox){
+    const H=DATA.airbox.header.map(x=>x.trim());const c=n=>H.indexOf(n);
+    const iOrd=c('OrderNumber'),iW=c('PrimaryWarehouse'),iSk=c('SKU'),iNm=c('Name'),iObo=c('OnBackOrder'),iDt=c('OrderDate');const seen=new Set();
+    DATA.airbox.rows.forEach(r=>{if(num(r[iObo])<=0)return;const sk=(r[iSk]||'').trim();const k=r[iOrd]+'|'+sk;if(seen.has(k))return;seen.add(k);addBO(normWH(r[iW]),sk,(r[iNm]||'').trim(),r[iOrd],parseD(r[iDt]));});
+  }
+  if(DATA.stord){
+    const H=DATA.stord.header.map(x=>x.trim());const c=n=>H.indexOf(n);
+    const iOrd=c('Order Number'),iSk=c('SKU'),iNm=c('Item Name'),iSt=c('Order Line Status'),iDt=c('Date');
+    DATA.stord.rows.forEach(r=>{if((r[iSt]||'').trim().toLowerCase()!=='backordered')return;addBO('Stord',stripTags(r[iSk]),(r[iNm]||'').trim(),stripTags(r[iOrd]),parseD(r[iDt]));});
+  }
+  if(DATA.next){
+    const H=DATA.next.header.map(x=>x.trim());const c=n=>H.findIndex(x=>x.toLowerCase()===n);
+    const iOrd=c('order id'),iSk=c('sku'),iNm=c('description'),iDt=c('created');
+    DATA.next.rows.forEach(r=>addBO('Next',(r[iSk]||'').trim(),(r[iNm]||'').trim(),r[iOrd],parseD(r[iDt])));
+  }
+  Object.entries(whAgg).forEach(([wh,v])=>{summary.byWh[wh]={na:v.na.size,bo:v.bo.size,total:v.na.size+v.bo.size};});
+  summary.totals.na=Object.values(whAgg).reduce((s,v)=>s+v.na.size,0);
+  summary.totals.bo=Object.values(whAgg).reduce((s,v)=>s+v.bo.size,0);
+  summary.totals.total=summary.totals.na+summary.totals.bo;
+  // top OOS SKUs per warehouse (by orders impacted, NA + backorder)
+  summary.topByWh={};
+  Object.values(skuMap).forEach(o=>{(summary.topByWh[o.wh]=summary.topByWh[o.wh]||[]).push({sku:o.sku,name:o.name,na:o.na.size,bo:o.bo.size,total:o.na.size+o.bo.size});});
+  Object.keys(summary.topByWh).forEach(wh=>{summary.topByWh[wh]=summary.topByWh[wh].sort((a,b)=>b.total-a.total||b.na-a.na).slice(0,5);});
+  // last 14 days ending at latest date present
+  const dates=Object.keys(dayMap).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  if(dates.length){
+    const end=new Date(dates[dates.length-1]+'T00:00:00Z');
+    for(let i=13;i>=0;i--){
+      const key=new Date(end.getTime()-i*86400000).toISOString().slice(0,10);
+      const dm=dayMap[key]||{na:new Set(),bo:new Set(),whNA:{},whBO:{}};
+      const wh={}; new Set([...Object.keys(dm.whNA),...Object.keys(dm.whBO)]).forEach(w=>{wh[w]=(dm.whNA[w]?dm.whNA[w].size:0)+(dm.whBO[w]?dm.whBO[w].size:0);});
+      summary.days.push({date:key,na:dm.na.size,bo:dm.bo.size,wh});
+    }
+  }
+}
+
+/* ---------- rendering ---------- */
+let naSort={k:'orders',dir:-1}, boSort={k:'qty',dir:-1}, covSort={k:'qty',dir:-1};
+function sortRows(rows,s){return rows.slice().sort((a,b)=>{const x=a[s.k],y=b[s.k];return (x>y?1:x<y?-1:0)*s.dir;});}
+
+function renderNA(){
+  const wh=document.getElementById('na-wh').value;
+  const inWh=r=>wh==='ALL'||r.wh===wh;
+  const oosRows=naRows.filter(r=>r.status!=='Released'&&inWh(r));
+  const oosSkus=new Set(oosRows.map(r=>r.sku)).size;
+  let units=0; oosRows.forEach(r=>units+=r.short);
+  const oosSet=new Set(); oosRows.forEach(r=>r.orderSet.forEach(o=>oosSet.add(o)));
+  const allSet=new Set(); naRows.filter(inWh).forEach(r=>r.orderSet.forEach(o=>allSet.add(o)));
+  const released=new Set(naRows.filter(r=>r.status==='Released'&&inWh(r)).map(r=>r.sku)).size;
+  document.getElementById('na-oos-skus').textContent=oosSkus;
+  document.getElementById('na-oos-orders').textContent=oosSet.size;
+  document.getElementById('na-orders').textContent=allSet.size;
+  document.getElementById('na-units').textContent=units;
+  document.getElementById('na-released').textContent=released;
+  const sorted=sortRows(oosRows,naSort);
+  const el=document.getElementById('na-table');
+  if(!DATA.na){el.innerHTML='<div class="empty">Upload the NA orders view + reserved inventory files to populate.</div>';return;}
+  if(!sorted.length){el.innerHTML='<div class="empty">No OOS SKUs for this filter 🎉</div>';return;}
+  el.innerHTML='<table><thead><tr>'+
+    '<th data-s="sku" data-t="na">SKU</th><th data-s="name" data-t="na">Description</th>'+
+    '<th data-s="wh" data-t="na">Warehouse</th>'+
+    '<th data-s="qty" data-t="na" class="num">NA units</th>'+
+    '<th data-s="reserved" data-t="na" class="num">Reserved</th>'+
+    '<th data-s="short" data-t="na" class="num">Units short</th>'+
+    '<th data-s="orders" data-t="na" class="num">Orders</th>'+
+    '<th data-s="status" data-t="na">Status</th></tr></thead><tbody>'+
+    sorted.map(r=>'<tr>'+
+      '<td class="sku">'+r.sku+'</td><td>'+(r.name||'—')+'</td>'+
+      '<td style="color:var(--muted)">'+r.wh+'</td>'+
+      '<td class="num">'+r.qty+'</td><td class="num">'+(r.reserved||0)+'</td>'+
+      '<td class="num">'+r.short+'</td><td class="num">'+r.orders+'</td>'+
+      '<td><span class="pill '+(r.status==='OOS'?'oos':'part')+'">'+r.status+'</span></td></tr>').join('')+
+    '</tbody></table>';
+  wireSort();
+}
+function renderBO(){
+  const wh=document.getElementById('bo-wh').value;
+  let rows=boRows.slice();
+  if(wh!=='ALL') rows=rows.filter(r=>r.wh===wh);
+  const skuSet=new Set(rows.map(r=>r.sku));
+  const orders=rows.reduce((s,r)=>s+r.orders,0);
+  const units=rows.reduce((s,r)=>s+r.qty,0);
+  document.getElementById('bo-oos-skus').textContent=skuSet.size;
+  document.getElementById('bo-orders').textContent=orders;
+  document.getElementById('bo-units').textContent=units;
+  const sorted=sortRows(rows,boSort);
+  const el=document.getElementById('bo-table');
+  if(!DATA.airbox&&!DATA.stord&&!DATA.next){el.innerHTML='<div class="empty">Upload the Airbox / Stord / Next backorder files to populate.</div>';return;}
+  if(!sorted.length){el.innerHTML='<div class="empty">No backorders for this filter 🎉</div>';return;}
+  el.innerHTML='<table><thead><tr>'+
+    '<th data-s="sku" data-t="bo">SKU</th><th data-s="name" data-t="bo">Description</th>'+
+    '<th data-s="wh" data-t="bo">Warehouse</th>'+
+    '<th data-s="qty" data-t="bo" class="num">Units BO</th>'+
+    '<th data-s="orders" data-t="bo" class="num">Orders</th>'+
+    '<th data-s="status" data-t="bo">Status</th></tr></thead><tbody>'+
+    sorted.map(r=>'<tr>'+
+      '<td class="sku">'+r.sku+'</td><td>'+(r.name||'—')+'</td>'+
+      '<td style="color:var(--muted)">'+r.wh+'</td>'+
+      '<td class="num">'+r.qty+'</td><td class="num">'+r.orders+'</td>'+
+      '<td><span class="pill '+(/hold/i.test(r.status)?'part':'oos')+'">'+r.status+'</span></td></tr>').join('')+
+    '</tbody></table>';
+  wireSort();
+}
+function renderSummary(){
+  const t=summary.totals;
+  document.getElementById('sum-total').textContent=t.total.toLocaleString();
+  document.getElementById('sum-na').textContent=t.na.toLocaleString();
+  document.getElementById('sum-bo').textContent=t.bo.toLocaleString();
+  // warehouse bars
+  const whs=Object.entries(summary.byWh).sort((a,b)=>b[1].total-a[1].total);
+  const maxWh=Math.max(1,...whs.map(([,v])=>v.total));
+  const whEl=document.getElementById('sum-wh');
+  whEl.innerHTML=whs.length?whs.map(([wh,v])=>'<div class="whrow"><span class="nm">'+wh+'</span>'+
+    '<div class="track"><div style="width:'+(v.na/maxWh*100)+'%;background:#378ADD"></div>'+
+    '<div style="width:'+(v.bo/maxWh*100)+'%;background:#EF9F27"></div></div>'+
+    '<span class="tot">'+v.total.toLocaleString()+'</span></div>').join(''):'<div class="empty">No data.</div>';
+  // top 5 OOS SKUs per warehouse
+  const topEl=document.getElementById('sum-top');
+  const topWhs=Object.keys(summary.topByWh).sort((a,b)=>(summary.byWh[b]?summary.byWh[b].total:0)-(summary.byWh[a]?summary.byWh[a].total:0));
+  topEl.innerHTML=topWhs.length?topWhs.map(wh=>'<div class="topwh"><div class="topwh-h">'+wh+
+    ' <span class="c">'+(summary.byWh[wh]?summary.byWh[wh].total.toLocaleString():0)+' OOS orders</span></div><table>'+
+    summary.topByWh[wh].map(r=>'<tr><td><span class="sku">'+r.sku+'</span><div class="nm">'+(r.name||'—')+'</div></td>'+
+      '<td class="o">'+r.total+' ord<div class="nm">'+(r.na&&r.bo?('NA '+r.na+' · BO '+r.bo):(r.bo?'backorder':'not assigned'))+'</div></td></tr>').join('')+
+    '</table></div>').join(''):'<div class="empty">No data.</div>';
+  // date chart
+  const leg=document.getElementById('sum-legend'), ch=document.getElementById('sum-chart');
+  const days=summary.days;
+  if(!days.length){ch.innerHTML='<div class="empty">Upload files to populate.</div>';leg.innerHTML='';return;}
+  const max=Math.max(1,...days.map(d=>d.na+d.bo));
+  const scale=200/max;
+  let series; // [{key,color}]
+  if(sumMode==='source'){
+    series=[{key:'na',color:'#378ADD',label:'Not assigned'},{key:'bo',color:'#EF9F27',label:'Backorders'}];
+    leg.innerHTML=series.map(s=>'<span><i style="background:'+s.color+'"></i>'+s.label+'</span>').join('');
+  }else{
+    const whset=[...new Set(days.flatMap(d=>Object.keys(d.wh)))].sort((a,b)=>(summary.byWh[b]?summary.byWh[b].total:0)-(summary.byWh[a]?summary.byWh[a].total:0));
+    series=whset.map(w=>({key:w,color:WH_COLORS[w]||'#9aa3b2',label:w}));
+    leg.innerHTML=series.map(s=>'<span><i style="background:'+s.color+'"></i>'+s.label+'</span>').join('');
+  }
+  ch.innerHTML=days.map(d=>{
+    const segs=series.map(s=>{
+      const v= sumMode==='source'? d[s.key] : (d.wh[s.key]||0);
+      if(!v)return '';
+      return '<div class="seg" style="height:'+(v*scale)+'px;background:'+s.color+'" title="'+s.label+': '+v+'"></div>';
+    }).join('');
+    const tot=d.na+d.bo;
+    const lbl=d.date.slice(8)+'/'+d.date.slice(5,7);
+    return '<div class="col" title="'+d.date+' — '+tot+' OOS orders">'+segs+(tot?'<span class="vlbl">'+tot+'</span>':'')+'<span class="clbl">'+lbl+'</span></div>';
+  }).join('');
+}
+function renderCov(){
+  const wh=document.getElementById('cov-wh').value;
+  let rows=naRows.filter(r=>wh==='ALL'||r.wh===wh);
+  const demand=rows.reduce((s,r)=>s+r.qty,0);
+  const short=rows.reduce((s,r)=>s+r.short,0);
+  const covered=demand-short;
+  const rel=rows.filter(r=>r.status==='Released').length;
+  const oos=rows.filter(r=>r.status!=='Released').length;
+  document.getElementById('cov-demand').textContent=demand.toLocaleString();
+  document.getElementById('cov-covered').textContent=covered.toLocaleString();
+  document.getElementById('cov-short').textContent=short.toLocaleString();
+  document.getElementById('cov-pct').textContent=demand?Math.round(covered/demand*100)+'%':'–';
+  document.getElementById('cov-rel').textContent=rel;
+  document.getElementById('cov-oos').textContent=oos;
+  const sorted=sortRows(rows.map(r=>({...r,covered:r.qty-r.short})),covSort);
+  const el=document.getElementById('cov-table');
+  if(!DATA.na){el.innerHTML='<div class="empty">Upload the NA orders view + reserved inventory files to populate.</div>';return;}
+  if(!sorted.length){el.innerHTML='<div class="empty">No not-assigned SKUs for this filter.</div>';return;}
+  const pill=s=>s==='Released'?'rel':(s==='OOS'?'oos':'part');
+  el.innerHTML='<table><thead><tr>'+
+    '<th data-s="sku" data-t="cov">SKU</th><th data-s="name" data-t="cov">Description</th>'+
+    '<th data-s="wh" data-t="cov">Warehouse</th>'+
+    '<th data-s="qty" data-t="cov" class="num">NA demand</th>'+
+    '<th data-s="reserved" data-t="cov" class="num">Reserved</th>'+
+    '<th data-s="covered" data-t="cov" class="num">Covered</th>'+
+    '<th data-s="short" data-t="cov" class="num">Short</th>'+
+    '<th data-s="status" data-t="cov">Status</th></tr></thead><tbody>'+
+    sorted.map(r=>'<tr>'+
+      '<td class="sku">'+r.sku+'</td><td>'+(r.name||'—')+'</td>'+
+      '<td style="color:var(--muted)">'+r.wh+'</td>'+
+      '<td class="num">'+r.qty+'</td><td class="num">'+(r.reserved||0)+'</td>'+
+      '<td class="num">'+r.covered+'</td><td class="num">'+r.short+'</td>'+
+      '<td><span class="pill '+pill(r.status)+'">'+r.status+'</span></td></tr>').join('')+
+    '</tbody></table>';
+  wireSort();
+}
+function wireSort(){
+  document.querySelectorAll('th[data-s]').forEach(th=>{
+    th.onclick=()=>{
+      const t=th.dataset.t, k=th.dataset.s;
+      const s=t==='na'?naSort:(t==='bo'?boSort:covSort);
+      if(s.k===k)s.dir*=-1; else {s.k=k;s.dir=-1;}
+      t==='na'?renderNA():t==='bo'?renderBO():renderCov();
+    };
+  });
+}
+
+/* ---------- filters ---------- */
+function fillFilters(){
+  const naWhs=new Set(); naRows.forEach(r=>naWhs.add(r.wh));
+  const boWhs=new Set(); boRows.forEach(r=>boWhs.add(r.wh));
+  fillSel('na-wh',[...naWhs].sort());
+  fillSel('bo-wh',[...boWhs].sort());
+  fillSel('cov-wh',[...naWhs].sort());
+}
+function fillSel(id,vals){
+  const s=document.getElementById(id); const cur=s.value;
+  s.innerHTML='<option value="ALL">All warehouses</option>'+vals.map(v=>'<option value="'+v+'">'+v+'</option>').join('');
+  if([...s.options].some(o=>o.value===cur)) s.value=cur;
+}
+
+/* ---------- export ---------- */
+function exportCSV(which){
+  let header,rows,fname;
+  if(which==='na'){
+    const wh=document.getElementById('na-wh').value;
+    let d=naRows.filter(r=>r.status!=='Released'&&(wh==='ALL'||r.wh===wh));
+    header=['SKU','Description','Warehouse','NA units','Reserved','Units short','Orders','Status'];
+    rows=sortRows(d,naSort).map(r=>[r.sku,r.name,r.wh,r.qty,r.reserved,r.short,r.orders,r.status]);
+    fname='NA_OOS_'+wh+'.csv';
+  }else if(which==='bo'){
+    const wh=document.getElementById('bo-wh').value;
+    let d=boRows.slice(); if(wh!=='ALL')d=d.filter(r=>r.wh===wh);
+    header=['SKU','Description','Warehouse','Units backordered','Orders','Status'];
+    rows=sortRows(d,boSort).map(r=>[r.sku,r.name,r.wh,r.qty,r.orders,r.status]);
+    fname='Backorders_'+wh+'.csv';
+  }else{
+    const wh=document.getElementById('cov-wh').value;
+    let d=naRows.filter(r=>wh==='ALL'||r.wh===wh).map(r=>({...r,covered:r.qty-r.short}));
+    header=['SKU','Description','Warehouse','NA demand','Reserved','Covered','Short','Status'];
+    rows=sortRows(d,covSort).map(r=>[r.sku,r.name,r.wh,r.qty,r.reserved,r.covered,r.short,r.status]);
+    fname='ReservedCoverage_'+wh+'.csv';
+  }
+  downloadCSV(header,rows,fname);
+}
+function downloadCSV(header,rows,fname){
+  const csv=[header,...rows].map(r=>r.map(c=>{
+    c=String(c==null?'':c); return /[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;
+  }).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'}); const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=fname; a.click(); URL.revokeObjectURL(url);
+}
+/* ---------- raw data export (Not assigned / consolidated Backorders) ---------- */
+function buildBORaw(){
+  const out=[];
+  if(DATA.airbox){const H=DATA.airbox.header.map(x=>x.trim());const c=n=>H.indexOf(n);
+    const iOrd=c('OrderNumber'),iW=c('PrimaryWarehouse'),iSk=c('SKU'),iNm=c('Name'),iObo=c('OnBackOrder'),iDt=c('OrderDate'),iCu=c('CustomerName');const seen=new Set();
+    DATA.airbox.rows.forEach(r=>{if(num(r[iObo])<=0)return;const sk=(r[iSk]||'').trim();const k=r[iOrd]+'|'+sk;if(seen.has(k))return;seen.add(k);
+      out.push(['Airbox',normWH(r[iW]),r[iOrd],r[iDt],sk,(r[iNm]||'').trim(),(r[iCu]||'').trim(),num(r[iObo]),'Backordered']);});}
+  if(DATA.stord){const H=DATA.stord.header.map(x=>x.trim());const c=n=>H.indexOf(n);
+    const iOrd=c('Order Number'),iSk=c('SKU'),iNm=c('Item Name'),iSt=c('Order Line Status'),iQty=c('Quantity'),iDt=c('Date'),iCu=c('Customer');
+    DATA.stord.rows.forEach(r=>{if((r[iSt]||'').trim().toLowerCase()!=='backordered')return;
+      out.push(['Stord','Stord',stripTags(r[iOrd]),r[iDt],stripTags(r[iSk]),(r[iNm]||'').trim(),(r[iCu]||'').trim(),num(r[iQty]),'Backordered']);});}
+  if(DATA.next){const H=DATA.next.header.map(x=>x.trim());const c=n=>H.findIndex(x=>x.toLowerCase()===n);
+    const iOrd=c('order id'),iSk=c('sku'),iNm=c('description'),iQty=c('ord qty'),iDt=c('created'),iSt=c('status');
+    DATA.next.rows.forEach(r=>out.push(['Next','Next',r[iOrd],r[iDt],(r[iSk]||'').trim(),(r[iNm]||'').trim(),'',num(r[iQty]),(r[iSt]||'').trim()||'Backordered']));}
+  return out;
+}
+function exportRaw(){
+  if(rawMode==='na'){ if(!DATA.na)return; downloadCSV(DATA.na.header,DATA.na.rows,'NotAssigned_raw.csv'); }
+  else{ downloadCSV(['Source','Warehouse','Order','Order date','SKU','Description','Customer','Qty on backorder','Status'],buildBORaw(),'Backorders_consolidated.csv'); }
+}
+function updateRawNote(){
+  const el=document.getElementById('raw-note');
+  if(rawMode==='na'){ el.textContent=DATA.na?('Exports all '+DATA.na.rows.length+' raw not-assigned order lines (original columns).'):'Upload the not-assigned file to export.'; }
+  else{ const has=DATA.airbox||DATA.stord||DATA.next; el.textContent=has?('Exports '+buildBORaw().length+' consolidated backorder lines across Airbox, Stord & Next (backordered status only).'):'Upload backorder files to export.'; }
+}
+
+function refresh(){ computeNA(); computeBO(); computeSummary(); fillFilters(); renderSummary(); renderNA(); renderBO(); renderCov(); updateRawNote(); }
+
+/* ---------- wiring ---------- */
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('page-sum').classList.toggle('hidden',t.dataset.page!=='sum');
+  document.getElementById('page-na').classList.toggle('hidden',t.dataset.page!=='na');
+  document.getElementById('page-bo').classList.toggle('hidden',t.dataset.page!=='bo');
+  document.getElementById('page-cov').classList.toggle('hidden',t.dataset.page!=='cov');
+});
+document.querySelectorAll('#chart-toggle button').forEach(b=>b.onclick=()=>{
+  sumMode=b.dataset.mode;
+  document.querySelectorAll('#chart-toggle button').forEach(x=>x.classList.toggle('on',x===b));
+  renderSummary();
+});
+document.querySelectorAll('#raw-toggle button').forEach(b=>b.onclick=()=>{
+  rawMode=b.dataset.raw;
+  document.querySelectorAll('#raw-toggle button').forEach(x=>x.classList.toggle('on',x===b));
+  updateRawNote();
+});
+document.getElementById('raw-export').onclick=exportRaw;
+document.getElementById('na-wh').onchange=renderNA;
+document.getElementById('bo-wh').onchange=renderBO;
+document.getElementById('cov-wh').onchange=renderCov;
+document.querySelectorAll('[data-export]').forEach(b=>b.onclick=()=>exportCSV(b.dataset.export));
+
+const drop=document.getElementById('drop'), fileInput=document.getElementById('file');
+function handleFiles(files){
+  let pending=files.length;
+  if(!pending) return;
+  [...files].forEach(f=>{
+    const rd=new FileReader();
+    rd.onload=e=>{ ingest(f.name,e.target.result); if(--pending===0){const ts=saveLS();renderBadges();refresh();showSaved(ts);} };
+    rd.readAsText(f);
+  });
+}
+function saveLS(){
+  if(EMBEDDED) return '';
+  const ts=new Date().toISOString();
+  try{ localStorage.setItem(LS_KEY,JSON.stringify({savedAt:ts,files:RAW})); }
+  catch(err){ const n=document.getElementById('saved-note'); if(n)n.textContent='Calculated for this session (too large to save locally — re-drop next time).'; return ''; }
+  return ts;
+}
+function showSaved(when){
+  const n=document.getElementById('saved-note'); if(!n) return;
+  if(!when){ n.innerHTML=''; return; }
+  const d=new Date(when);
+  n.innerHTML='Showing data from '+d.toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})+' · <a id="clear-saved">clear &amp; reset</a>';
+  const c=document.getElementById('clear-saved'); if(c)c.onclick=()=>{localStorage.removeItem(LS_KEY);location.reload();};
+}
+/* ---------- hosted/shared mode: auto-fetch the day's files from /data ---------- */
+async function loadServerData(){
+  const keys=['na','reserved','airbox','stord','next'];
+  let any=false;
+  for(const k of keys){
+    try{ const res=await fetch('data/'+k+'.csv',{cache:'no-store'});
+      if(res.ok){ const t=await res.text(); if(t&&t.trim()&&ingest(k,t)) any=true; } }catch(e){}
+  }
+  if(any){
+    refresh();
+    let asof='';
+    try{ const r=await fetch('data/asof.txt',{cache:'no-store'}); if(r.ok) asof=(await r.text()).trim(); }catch(e){}
+    const n=document.getElementById('saved-note'); if(n) n.innerHTML='Live data from the server'+(asof?(' · '+asof):'')+' · drop files below to preview new data locally';
+  }
+  return any;
+}
+fileInput.onchange=e=>handleFiles(e.target.files);
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('hover');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hover');}));
+drop.addEventListener('drop',e=>handleFiles(e.dataTransfer.files));
+
+var EMBEDDED=null, EMBED_DATE=''; /*__EMBED__*/
+if(EMBEDDED){
+  Object.values(EMBEDDED).forEach(txt=>ingest('embedded',txt));
+  refresh();
+  document.getElementById('drop').classList.add('hidden');
+  var rc=document.getElementById('raw-card'); if(rc) rc.classList.add('hidden');
+  document.getElementById('asof').textContent='· '+(EMBED_DATE||'')+' · shared snapshot';
+}else{
+  document.getElementById('asof').textContent='· as of '+new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  loadServerData().then(loaded=>{
+    if(!loaded){
+      let restoredAt=null;
+      try{ const s=JSON.parse(localStorage.getItem(LS_KEY)||'null');
+        if(s&&s.files&&Object.keys(s.files).length){ Object.values(s.files).forEach(t=>{if(t)ingest('saved',t);}); refresh(); restoredAt=s.savedAt; }
+      }catch(err){}
+      showSaved(restoredAt);
+    }
+    renderBadges();
+  });
+}
+renderBadges();
+</script>
+</body>
+</html>
