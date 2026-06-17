@@ -260,6 +260,8 @@ let sumMode='source', rawMode='na';
 const WH_COLORS={'Stord':'#378ADD','Airbox 18':'#EF9F27','Airbox NL':'#1D9E75','Next':'#D4537E','FBA USA':'#7F77DD','FBA UK':'#9aa3b2','FBA GE':'#D85A30'};
 // bundles explode into components on assignment — not real OOS
 const isBundle=(sku,name)=>/^WBU/i.test(sku||'')||/\bbundle\b/i.test(name||'');
+// wholesale/retail packs (SRP shelf-ready, retail flatpacks) — excluded from backorders (D2C only)
+const isWholesale=(sku,name)=>/^WSRP/i.test(sku||'')||/^WCP/i.test(sku||'')||/\bSRP\b/i.test(name||'')||/flatpack/i.test(name||'');
 
 /* ---------- file ingestion w/ auto-detect ---------- */
 function detect(headerRow){
@@ -267,7 +269,7 @@ function detect(headerRow){
   const has=k=>h.some(x=>x.includes(k));
   if(has('ff_number')) return 'na';
   if(has('to_location/rec_name')||has('product/rec_name')) return 'reserved';
-  if(has('onbackorder')) return 'airbox';
+  if(has('onbackorder')||has('orderitems')) return 'airbox';
   if(has('order line status')) return 'stord';
   if(has('ord qty')) return 'next';
   return null;
@@ -326,6 +328,69 @@ function computeNA(){
             orders:a.orders.size,orderSet:a.orders,status};
   });
 }
+/* ---------- normalise Airbox backorder lines (supports both export formats) ---------- */
+function airboxLines(){
+  if(!DATA.airbox) return [];
+  const H=DATA.airbox.header.map(x=>x.trim()); const c=n=>H.indexOf(n);
+  const out=[];
+  if(c('OnBackOrder')>=0){ // old per-line format
+    const iOrd=c('OrderNumber'),iW=c('PrimaryWarehouse'),iSk=c('SKU'),iNm=c('Name'),iObo=c('OnBackOrder'),iDt=c('OrderDate'),iCu=c('CustomerName');
+    const seen=new Set();
+    DATA.airbox.rows.forEach(r=>{
+      const obo=num(r[iObo]); if(obo<=0) return;
+      const sku=(r[iSk]||'').trim(), ord=r[iOrd], k=ord+'|'+sku; if(seen.has(k))return; seen.add(k);
+      if(isWholesale(sku,(r[iNm]||''))) return;
+      out.push({wh:normWH(r[iW]),sku,name:(r[iNm]||'').trim(),qty:obo,order:ord,date:parseD(r[iDt]),cust:(r[iCu]||'').trim()});
+    });
+  } else if(c('OrderItems')>=0){ // new order-level format (SKUs packed in OrderItems)
+    const iOrd=c('OrderNumber'),iId=c('OrderId'),iW=c('Warehouse'),iStat=c('OrderStatus'),iItems=c('OrderItems'),iDt=c('OrderDate'),iCh=c('Channel'),iFn=c('FirstName'),iLn=c('LastName'),iCo=c('CompanyName');
+    DATA.airbox.rows.forEach(r=>{
+      if(!/backorder/i.test(r[iStat]||'')) return;
+      const ch=(r[iCh]||'').trim().toUpperCase(), wRaw=(r[iW]||'');
+      if(ch==='PACK OFF'||/zero/i.test(wRaw)) return; // exclude wholesale/replenishment pack-off
+      const order=(r[iOrd]||r[iId]||'').trim(), wh=normWH(wRaw), date=parseD(r[iDt]);
+      const cust=((r[iFn]||'')+' '+(r[iLn]||'')).trim()||(r[iCo]||'').trim();
+      const per={};
+      (r[iItems]||'').split(';').forEach(it=>{
+        it=it.trim(); if(!it) return;
+        const fc=it.indexOf(':'), lc=it.lastIndexOf(':'); if(fc<0||lc<=fc) return;
+        const sku=it.slice(0,fc).trim(); if(!sku) return;
+        const name=it.slice(fc+1,lc).trim(), qty=num(it.slice(lc+1));
+        if(!per[sku]) per[sku]={name,qty:0}; per[sku].qty+=qty;
+      });
+      Object.entries(per).forEach(([sku,v])=>{ if(isWholesale(sku,v.name))return; out.push({wh,sku,name:v.name,qty:v.qty,order,date,cust}); });
+    });
+  }
+  return out;
+}
+
+function stordLines(){
+  if(!DATA.stord) return [];
+  const H=DATA.stord.header.map(x=>x.trim());const c=n=>H.indexOf(n);
+  const iOrd=c('Order Number'),iSk=c('SKU'),iNm=c('Item Name'),iSt=c('Order Line Status'),iQty=c('Quantity'),iDt=c('Date'),iCu=c('Customer');
+  const out=[];
+  DATA.stord.rows.forEach(r=>{
+    if((r[iSt]||'').trim().toLowerCase()!=='backordered') return; // ignore on_hold etc.
+    const sku=stripTags(r[iSk]), name=(r[iNm]||'').trim();
+    if(isWholesale(sku,name)) return;
+    out.push({wh:'Stord',sku,name,qty:num(r[iQty]),order:stripTags(r[iOrd]),date:parseD(r[iDt]),cust:(r[iCu]||'').trim()});
+  });
+  return out;
+}
+function nextLines(){
+  if(!DATA.next) return [];
+  const H=DATA.next.header.map(x=>x.trim());const c=n=>H.findIndex(x=>x.toLowerCase()===n);
+  const iOrd=c('order id'),iSk=c('sku'),iNm=c('description'),iQty=c('ord qty'),iDt=c('created');
+  const out=[];
+  DATA.next.rows.forEach(r=>{
+    const sku=(r[iSk]||'').trim(), name=(r[iNm]||'').trim();
+    if(isWholesale(sku,name)) return;
+    out.push({wh:'Next',sku,name,qty:num(r[iQty]),order:r[iOrd],date:parseD(r[iDt]),cust:''});
+  });
+  return out;
+}
+function boLines(){ return [...airboxLines(),...stordLines(),...nextLines()]; }
+
 /* ---------- compute Page 2: Backorders ---------- */
 function computeBO(){
   boRows=[];
@@ -336,34 +401,8 @@ function computeBO(){
     if(!agg[k]) agg[k]={sku,name,wh,qty:0,orders:new Set(),status};
     agg[k].qty+=qty; agg[k].orders.add(order);
   };
-  if(DATA.airbox){
-    const H=DATA.airbox.header.map(x=>x.trim()); const ci=n=>H.indexOf(n);
-    const iOrd=ci('OrderNumber'),iWh=ci('PrimaryWarehouse'),iSku=ci('SKU'),iName=ci('Name'),iObo=ci('OnBackOrder');
-    const seen=new Set();
-    DATA.airbox.rows.forEach(r=>{
-      const obo=num(r[iObo]); if(obo<=0) return;
-      const sku=(r[iSku]||'').trim(), ord=r[iOrd], key=ord+'|'+sku;
-      if(seen.has(key)) return; seen.add(key);
-      add(sku,(r[iName]||'').trim(),normWH(r[iWh]),obo,ord,'Backordered');
-    });
-  }
-  if(DATA.stord){
-    const H=DATA.stord.header.map(x=>x.trim()); const ci=n=>H.indexOf(n);
-    const iSku=ci('SKU'),iName=ci('Item Name'),iStat=ci('Order Line Status'),iQty=ci('Quantity'),iOrd=ci('Order Number');
-    DATA.stord.rows.forEach(r=>{
-      if((r[iStat]||'').trim().toLowerCase()!=='backordered') return; // ignore on_hold etc.
-      const sku=stripTags(r[iSku]); const ord=stripTags(r[iOrd]);
-      add(sku,(r[iName]||'').trim(),'Stord',num(r[iQty]),ord,'Backordered');
-    });
-  }
-  if(DATA.next){
-    const H=DATA.next.header.map(x=>x.trim()); const ci=n=>H.findIndex(x=>x.toLowerCase()===n);
-    const iSku=ci('sku'),iName=ci('description'),iQty=ci('ord qty'),iOrd=ci('order id');
-    DATA.next.rows.forEach(r=>{
-      add((r[iSku]||'').trim(),(r[iName]||'').trim(),'Next',num(r[iQty]),r[iOrd],'Backordered');
-    });
-  }
-  boRows=Object.values(agg).map(a=>({sku:a.sku,name:a.name,wh:a.wh,qty:a.qty,orders:a.orders.size,status:a.status}));
+  boLines().forEach(l=>add(l.sku,l.name,l.wh,l.qty,l.order,'Backordered'));
+  boRows=Object.values(agg).map(a=>({sku:a.sku,name:a.name,wh:a.wh,qty:a.qty,orders:a.orders.size,orderSet:a.orders,status:a.status}));
 }
 
 /* ---------- compute Summary (NA OOS + Backorders, distinct orders) ---------- */
@@ -387,21 +426,7 @@ function computeSummary(){
     });
   }
   const addBO=(wh,sku,name,ord,d)=>{W(wh).bo.add(ord);if(sku)SK(wh,sku,name).bo.add(ord);const dm=D(d);dm.bo.add(ord);(dm.whBO[wh]=dm.whBO[wh]||new Set()).add(ord);};
-  if(DATA.airbox){
-    const H=DATA.airbox.header.map(x=>x.trim());const c=n=>H.indexOf(n);
-    const iOrd=c('OrderNumber'),iW=c('PrimaryWarehouse'),iSk=c('SKU'),iNm=c('Name'),iObo=c('OnBackOrder'),iDt=c('OrderDate');const seen=new Set();
-    DATA.airbox.rows.forEach(r=>{if(num(r[iObo])<=0)return;const sk=(r[iSk]||'').trim();const k=r[iOrd]+'|'+sk;if(seen.has(k))return;seen.add(k);addBO(normWH(r[iW]),sk,(r[iNm]||'').trim(),r[iOrd],parseD(r[iDt]));});
-  }
-  if(DATA.stord){
-    const H=DATA.stord.header.map(x=>x.trim());const c=n=>H.indexOf(n);
-    const iOrd=c('Order Number'),iSk=c('SKU'),iNm=c('Item Name'),iSt=c('Order Line Status'),iDt=c('Date');
-    DATA.stord.rows.forEach(r=>{if((r[iSt]||'').trim().toLowerCase()!=='backordered')return;addBO('Stord',stripTags(r[iSk]),(r[iNm]||'').trim(),stripTags(r[iOrd]),parseD(r[iDt]));});
-  }
-  if(DATA.next){
-    const H=DATA.next.header.map(x=>x.trim());const c=n=>H.findIndex(x=>x.toLowerCase()===n);
-    const iOrd=c('order id'),iSk=c('sku'),iNm=c('description'),iDt=c('created');
-    DATA.next.rows.forEach(r=>addBO('Next',(r[iSk]||'').trim(),(r[iNm]||'').trim(),r[iOrd],parseD(r[iDt])));
-  }
+  boLines().forEach(l=>addBO(l.wh,l.sku,l.name,l.order,l.date));
   Object.entries(whAgg).forEach(([wh,v])=>{summary.byWh[wh]={na:v.na.size,bo:v.bo.size,total:v.na.size+v.bo.size};});
   summary.totals.na=Object.values(whAgg).reduce((s,v)=>s+v.na.size,0);
   summary.totals.bo=Object.values(whAgg).reduce((s,v)=>s+v.bo.size,0);
@@ -467,7 +492,8 @@ function renderBO(){
   let rows=boRows.slice();
   if(wh!=='ALL') rows=rows.filter(r=>r.wh===wh);
   const skuSet=new Set(rows.map(r=>r.sku));
-  const orders=rows.reduce((s,r)=>s+r.orders,0);
+  const oset=new Set(); rows.forEach(r=>r.orderSet&&r.orderSet.forEach(o=>oset.add(o)));
+  const orders=oset.size;
   const units=rows.reduce((s,r)=>s+r.qty,0);
   document.getElementById('bo-oos-skus').textContent=skuSet.size;
   document.getElementById('bo-orders').textContent=orders;
@@ -631,19 +657,8 @@ function downloadCSV(header,rows,fname){
 }
 /* ---------- raw data export (Not assigned / consolidated Backorders) ---------- */
 function buildBORaw(){
-  const out=[];
-  if(DATA.airbox){const H=DATA.airbox.header.map(x=>x.trim());const c=n=>H.indexOf(n);
-    const iOrd=c('OrderNumber'),iW=c('PrimaryWarehouse'),iSk=c('SKU'),iNm=c('Name'),iObo=c('OnBackOrder'),iDt=c('OrderDate'),iCu=c('CustomerName');const seen=new Set();
-    DATA.airbox.rows.forEach(r=>{if(num(r[iObo])<=0)return;const sk=(r[iSk]||'').trim();const k=r[iOrd]+'|'+sk;if(seen.has(k))return;seen.add(k);
-      out.push(['Airbox',normWH(r[iW]),r[iOrd],r[iDt],sk,(r[iNm]||'').trim(),(r[iCu]||'').trim(),num(r[iObo]),'Backordered']);});}
-  if(DATA.stord){const H=DATA.stord.header.map(x=>x.trim());const c=n=>H.indexOf(n);
-    const iOrd=c('Order Number'),iSk=c('SKU'),iNm=c('Item Name'),iSt=c('Order Line Status'),iQty=c('Quantity'),iDt=c('Date'),iCu=c('Customer');
-    DATA.stord.rows.forEach(r=>{if((r[iSt]||'').trim().toLowerCase()!=='backordered')return;
-      out.push(['Stord','Stord',stripTags(r[iOrd]),r[iDt],stripTags(r[iSk]),(r[iNm]||'').trim(),(r[iCu]||'').trim(),num(r[iQty]),'Backordered']);});}
-  if(DATA.next){const H=DATA.next.header.map(x=>x.trim());const c=n=>H.findIndex(x=>x.toLowerCase()===n);
-    const iOrd=c('order id'),iSk=c('sku'),iNm=c('description'),iQty=c('ord qty'),iDt=c('created'),iSt=c('status');
-    DATA.next.rows.forEach(r=>out.push(['Next','Next',r[iOrd],r[iDt],(r[iSk]||'').trim(),(r[iNm]||'').trim(),'',num(r[iQty]),(r[iSt]||'').trim()||'Backordered']));}
-  return out;
+  const src={Stord:'Stord',Next:'Next'};
+  return boLines().map(l=>[(l.wh&&l.wh.indexOf('Airbox')===0?'Airbox':(src[l.wh]||l.wh)),l.wh,l.order,l.date,l.sku,l.name,l.cust||'',l.qty,'Backordered']);
 }
 function exportRaw(){
   if(rawMode==='na'){ if(!DATA.na)return; downloadCSV(DATA.na.header,DATA.na.rows,'NotAssigned_raw.csv'); }
@@ -652,7 +667,7 @@ function exportRaw(){
 function updateRawNote(){
   const el=document.getElementById('raw-note');
   if(rawMode==='na'){ el.textContent=DATA.na?('Exports all '+DATA.na.rows.length+' raw not-assigned order lines (original columns).'):'Upload the not-assigned file to export.'; }
-  else{ const has=DATA.airbox||DATA.stord||DATA.next; el.textContent=has?('Exports '+buildBORaw().length+' consolidated backorder lines across Airbox, Stord & Next (backordered status only).'):'Upload backorder files to export.'; }
+  else{ const has=DATA.airbox||DATA.stord||DATA.next; el.textContent=has?('Exports '+buildBORaw().length+' consolidated D2C backorder lines across Airbox, Stord & Next (wholesale/SRP & pack-off excluded).'):'Upload backorder files to export.'; }
 }
 
 function refresh(){ computeNA(); computeBO(); computeSummary(); fillFilters(); renderSummary(); renderNA(); renderBO(); renderCov(); updateRawNote(); }
